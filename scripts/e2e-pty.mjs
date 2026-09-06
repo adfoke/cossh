@@ -340,27 +340,18 @@ ok("分支判定成立：本机已有(路径行) 或 本次真装(npm added 行)
 ok("runOnOpen 用后即焚：节点 data 已抹除（刷新不会重跑安装）",
   await evalJs(`(() => { const n = window.__sshxRf.getNodes().find(n => n.id === ${JSON.stringify(mC.id)}); return !!n && n.data.runOnOpen == null; })()`));
 
-/* ── 8c. 🔑 配置 Codex：GUI 表单 → 服务端合并写 ~/.codex（现场备份，测毕恢复） ── */
-const CODEX_FILES = {
-  cfg: path.join(os.homedir(), ".codex/config.toml"),
-  env: path.join(os.homedir(), ".codex/.env"),
-};
-const backups = {};
-for (const [k, f] of Object.entries(CODEX_FILES)) backups[k] = fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null;
-const restoreOnce = (() => {
-  let done = false;
-  return () => {
-    if (done) return;
-    done = true;
-    for (const [k, f] of Object.entries(CODEX_FILES)) {
-      if (backups[k] === null) fs.rmSync(f, { force: true });
-      else fs.writeFileSync(f, backups[k]);
-    }
-  };
-})();
-process.on("exit", restoreOnce);
-
-// 预置「用户已有配置」：合并安全性必须拿它当靶子
+/* ── 8c-8e. Codex 三连：只打隔离演练场，绝不碰真实 ~/.codex ──
+   服务端 SSHX_CODEX_HOME 可整体改写配置目录；GET /api/codex/config 回读的路径
+   不是真 HOME 默认位才算隔离。血泪教训（2026-09-06）：旧「备份→覆写→恢复」设计里
+   8c 显式调 restoreOnce 把 exit 钩子标 done 作废，8d 随后覆写并在收尾 rmSync——
+   只要用户真配置存在就会被这套流程吃掉。现在：路径不隔离就整段 SKIP。 */
+const cfgProbe = await (await fetch(HEALTH.replace("/api/health", "/api/codex/config"))).json();
+const CODEX_FILES = { cfg: cfgProbe.configPath, env: cfgProbe.envPath };
+const codexIsolated = !!cfgProbe.configPath && cfgProbe.configPath !== path.join(os.homedir(), ".codex", "config.toml");
+if (!codexIsolated) {
+  console.log("SKIP  8c/8d/8e（server 直写真实 ~/.codex，测试拒碰现场；全量请 SSHX_CODEX_HOME=/tmp/codex-fixture npm run dev）");
+} else {
+// 预置「用户已有配置」靶子（就在演练场里，用完即弃）
 fs.mkdirSync(path.dirname(CODEX_FILES.cfg), { recursive: true });
 fs.writeFileSync(CODEX_FILES.cfg, 'sandbox_mode = "workspace-write"\n\n[my_custom]\nkeep = "me"\n');
 fs.writeFileSync(CODEX_FILES.env, "SOME_OTHER=keepme\n");
@@ -414,9 +405,6 @@ ok("非法地址被拒（表单红字），弹层不关", await evalJs(`document
 ok("非法请求没污染 config.toml", /base_url = "http:\/\/127\.0\.0\.1:9\/v1"/.test(fs.readFileSync(CODEX_FILES.cfg, "utf8")));
 await clickEl(`[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='取消')`);
 await sleep(300);
-restoreOnce();
-ok("8c 现场已恢复（用户 ~/.codex 文件归位）",
-  (backups.cfg === null ? !fs.existsSync(CODEX_FILES.cfg) : true) && (backups.env === null ? !fs.existsSync(CODEX_FILES.env) : true));
 
 /* ── 8d. ↓ 获取模型列表：假网关 + 服务端代理 + 已存 key 兜底 + chip 选模型 ── */
 let lastAuth = "";
@@ -481,14 +469,9 @@ fakeApi.close();
 for (const f of Object.values(CODEX_FILES)) fs.rmSync(f, { force: true });
 ok("8d 现场已清理", !fs.existsSync(CODEX_FILES.cfg) && !fs.existsSync(CODEX_FILES.env));
 
-/* ── 8e. 📜 Codex 规矩：幂等标记块写 ~/.codex/AGENTS.md + 弹窗验货 ── */
+/* ── 8e. 📜 Codex 规矩：幂等标记块写演练场 AGENTS.md + 弹窗验货 ── */
 {
-  const AGF = path.join(os.homedir(), ".codex", "AGENTS.md");
-  const agBak = fs.existsSync(AGF) ? fs.readFileSync(AGF, "utf8") : null;
-  process.on("exit", () => {
-    if (agBak === null) fs.rmSync(AGF, { force: true });
-    else fs.writeFileSync(AGF, agBak);
-  });
+  const AGF = path.join(path.dirname(CODEX_FILES.cfg), "AGENTS.md");
   fs.writeFileSync(AGF, "我的自定义规矩：永远不要碰生产库\n"); // 合并安全靶子
   const ruleBtn = `[...document.querySelectorAll('button')].find(x=>x.textContent.includes('Codex 规矩'))`;
   await clickEl(ruleBtn);
@@ -505,8 +488,8 @@ ok("8d 现场已清理", !fs.existsSync(CODEX_FILES.cfg) && !fs.existsSync(CODEX
   await sleep(1600);
   const n2 = ((fs.readFileSync(AGF, "utf8")).match(/sshx:remote-tmux:start/g) ?? []).length;
   ok("幂等：重复点击标记块仍只有一份", n1 === 1 && n2 === 1, `${n1}→${n2}`);
-  process.exit; // 恢复由 exit 钩子负责
 }
+} // end: 8c/8d/8e 隔离演练场
 
 /* ── 10. 👀 自动观察：ssh shim 上报 → 画布自动拉起 attach 窗（无需手敲） ── */
 await fetch(HEALTH.replace("/api/health", "/api/observe/clear"), { method: "POST" }); // 清事件环，测试自给自足

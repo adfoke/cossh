@@ -6,7 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { parse, stringify } from "smol-toml";
 
-const CODEX_DIR = path.join(os.homedir(), ".codex");
+// SSHX_CODEX_HOME 整体改写 codex 配置目录（e2e 演练场/多实例隔离用）；缺省真实 ~/.codex
+const CODEX_DIR = process.env.SSHX_CODEX_HOME?.trim() || path.join(os.homedir(), ".codex");
 const CONFIG_PATH = path.join(CODEX_DIR, "config.toml");
 const ENV_PATH = path.join(CODEX_DIR, ".env");
 

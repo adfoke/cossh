@@ -113,7 +113,9 @@ Vite + React 19 + TypeScript（strict）· HeroUI v3 · @xyflow/react（无限�
 
 ```bash
 npm run typecheck && npm run build   # 静态自检
+SSHX_CODEX_HOME=/tmp/codex-fixture npm run dev   # Codex 三连测必需：演练场隔离
 node scripts/e2e-pty.mjs             # 需要 npm run dev 在跑 + 一个 CDP :9222 的 headless Chrome
+                                     # dev 栈未配 SSHX_CODEX_HOME 时 8c/8d/8e 自动 SKIP（绝不碰真实 ~/.codex）
 node scripts/e2e-theme.mjs           # 主题跟随 7 断言
 ```
 

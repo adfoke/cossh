@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const AGENTS_PATH = path.join(os.homedir(), ".codex", "AGENTS.md");
+const AGENTS_PATH = path.join(process.env.SSHX_CODEX_HOME?.trim() || path.join(os.homedir(), ".codex"), "AGENTS.md");
 const BEGIN = "<!-- sshx:remote-tmux:start -->";
 const END = "<!-- sshx:remote-tmux:end -->";
 
