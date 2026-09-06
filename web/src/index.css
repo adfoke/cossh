@@ -1,0 +1,113 @@
+@import "@heroui/styles";
+@import "@xyflow/react/dist/style.css";
+@import "@xterm/xterm/css/xterm.css";
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "PingFang SC",
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    sans-serif;
+  overscroll-behavior: none;
+}
+
+/* 画布背景布跟随应用主题：light 浅底、dark 深底
+   （xyflow 默认 dark=#141414、light=transparent，都不跟 HeroUI 调色板） */
+.react-flow {
+  --xy-background-color: var(--background);
+}
+
+/* React Flow 背景/控件跟随主题 */
+.react-flow__controls {
+  box-shadow: 0 4px 16px var(--surface-shadow, rgb(0 0 0 / 0.3));
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.react-flow__controls button {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  color: var(--foreground);
+}
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+.react-flow__attribution {
+  background: transparent;
+  color: var(--muted);
+}
+
+/* 无边框节点：卡片本体自己画 */
+.react-flow__node {
+  cursor: default;
+}
+
+/* 滚动条 */
+.thin-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, rgb(128 128 128 / 0.4));
+  border-radius: 3px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* xterm 容器 */
+.term-host {
+  height: 100%;
+  width: 100%;
+  padding: 6px 4px 4px 8px;
+  box-sizing: border-box;
+}
+.term-host .xterm,
+.term-host .xterm-viewport,
+.term-host .xterm-screen {
+  height: 100% !important;
+}
+
+/* 顶栏小按钮 */
+.top-btn {
+  border-radius: 0.625rem;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
+  line-height: 1.1;
+  color: var(--foreground);
+  transition: background 0.15s ease;
+}
+.top-btn:hover {
+  background: var(--background-tertiary);
+}
+.top-btn.accent {
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.top-btn.accent:hover {
+  background: color-mix(in oklab, var(--accent) 26%, transparent);
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.pulse-dot {
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}

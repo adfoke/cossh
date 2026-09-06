@@ -1,0 +1,26 @@
+{
+  "name": "@sshx/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --watch src/index.ts",
+    "start": "node src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "node-pty": "^1.1.0",
+    "smol-toml": "^1.8.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^26.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^7.0.2"
+  }
+}

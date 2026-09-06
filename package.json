@@ -1,0 +1,23 @@
+{
+  "name": "sshx-canvas",
+  "private": true,
+  "version": "0.1.0",
+  "description": "无限画布本机终端：每个窗口都是真 PTY shell，内置 Codex CLI 安装/配置与远端 tmux 自动观察窗（127.0.0.1 only）",
+  "workspaces": [
+    "web",
+    "server"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "npm run dev -w web",
+    "dev:server": "npm run dev -w server",
+    "build": "npm run build -w web",
+    "typecheck": "npm run typecheck -w web && npm run typecheck -w server",
+    "postinstall": "node scripts/fix-node-pty.mjs",
+    "start": "npm run build && npm run start -w server"
+  },
+  "allowScripts": {
+    "node-pty@1.1.0": true
+  },
+  "license": "MIT"
+}
