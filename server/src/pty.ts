@@ -59,7 +59,11 @@ export function attachPty(ws: WebSocket, search: URLSearchParams): void {
       name: "xterm-256color",
       cols,
       rows,
-      cwd: process.env.HOME ?? process.cwd(),
+      // SSHX_TERM_CWD：终端开局目录（codex 信任边界跟着它收窄；目录不存在则回落 HOME）
+      cwd: (() => {
+        const want = process.env.SSHX_TERM_CWD?.trim();
+        return want && fs.existsSync(want) ? want : (process.env.HOME ?? process.cwd());
+      })(),
       env: {
         ...process.env,
         TERM_PROGRAM: "sshx-canvas",

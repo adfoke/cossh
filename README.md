@@ -26,6 +26,8 @@ npm run dev        # web :5173 + server :8787，打开 http://localhost:5173
 ```
 
 端口可配：server 用 `SSHX_PORT=<port>`（默认 8787）。
+终端开局目录：`SSHX_TERM_CWD=<dir>`（默认 `~`）——codex 的目录信任边界跟着它收窄，
+建议指到专用工作目录（如 `~/codex`），避免 codex 把整个家目录记成 trusted。
 
 ## 网络与代理
 
@@ -73,7 +75,7 @@ dev 下 ws 直连 8787（绕开 vite 代理——它会留半开上游连接）�
 | 须知（红色） | 三条前置：依赖 npm / 这是用 codex-cli 操作服务器的程序 / 装完 codex 让 codex 帮你装 tmux |
 | ＋终端 | 新建真 PTY 窗口（可开无限个） |
 | 📦 安装 Codex | 开一次性安装窗：先 `command -v codex` 检查，缺了才 `npm install -g @openai/codex`（走你自己的 npm 代理配置；runOnOpen 用后即焚） |
-| 🔑 配置 Codex | 表单写 `~/.codex`：`config.toml` 合并更新自定义 provider（其它键无损），key 进 `.env`（0600、永不回显、留空不改）；`GET/POST /api/codex/config` |
+| 🔑 配置 Codex | 表单写 `~/.codex`：`config.toml` 合并更新自定义 provider（其它键无损），key 进 `.env`（0600、永不回显、留空不改）；含思考等级 `model_reasoning_effort`（minimal~xhigh，默认删键）与可选「模型菜单」`model_catalog_json`（用↓获取的列表生成 `sshx-models.json`，替换 codex 内置菜单，取消勾选即还原）；`GET/POST /api/codex/config` |
 | 📜 Codex 规矩 | 幂等标记块写入 `~/.codex/AGENTS.md`：远端 tmux 共享工位协议（send-keys/capture-pane），让 codex 的远程操作天然可被 👀 围观；本仓库 `AGENTS.md` 随 clone 零点击生效 |
 | ↓ 获取（模型列表） | `POST /api/codex/models` 服务端代理：curl 直连失败退 `SSHX_PROXY`（若配置），base 带/不带 `/v1` 双候选探测，返回归一成 chips 可点选；key 表单留空 = 用已存的，接口只回 `{models}` |
 | 拖标题栏 / 滚轮 / 拖空白 | 移窗 / 缩放画布 / 平移 |

@@ -24,6 +24,8 @@ export function CodexConfigOverlay() {
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [models, setModels] = useState<string[] | null>(null);
+  const [effort, setEffort] = useState("");
+  const [useCatalog, setUseCatalog] = useState(false);
   const [modelsErr, setModelsErr] = useState("");
   const [fetching, setFetching] = useState(false);
 
@@ -36,6 +38,8 @@ export function CodexConfigOverlay() {
       setBaseUrl(c.baseUrl);
       setModel(c.model);
       setWireApi(c.wireApi || "responses");
+      setEffort(c.reasoningEffort ?? "");
+      setUseCatalog(c.modelCatalog);
       setHasKey(c.hasKey);
       setConfigured(c.configured);
       setPaths({ config: c.configPath, env: c.envPath });
@@ -63,7 +67,15 @@ export function CodexConfigOverlay() {
     setSaving(true);
     setMsg(null);
     try {
-      const r = await saveCodexConfig({ baseUrl, apiKey, model, wireApi });
+      const r = await saveCodexConfig({
+        baseUrl,
+        apiKey,
+        model,
+        wireApi,
+        reasoningEffort: effort,
+        useModelCatalog: useCatalog,
+        modelIds: models ?? [],
+      });
       setHasKey(r.hasKey);
       setConfigured(r.configured);
       setApiKey("");
@@ -140,7 +152,25 @@ export function CodexConfigOverlay() {
               <option value="chat">chat</option>
             </select>
           </div>
+          <div className="w-40">
+            <label className={labelCls} htmlFor="codex-effort">
+              思考等级
+            </label>
+            <select id="codex-effort" className={inputCls} value={effort} onChange={(e) => setEffort(e.target.value)}>
+              <option value="">默认</option>
+              <option value="minimal">minimal</option>
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+              <option value="xhigh">xhigh</option>
+            </select>
+          </div>
         </div>
+        <label className="flex items-center gap-2 text-xs text-[var(--muted)]" htmlFor="codex-catalog">
+          <input id="codex-catalog" type="checkbox" checked={useCatalog} disabled={!models?.length} onChange={(e) => setUseCatalog(e.target.checked)} />
+          把刚获取的 {models?.length ?? 0} 个模型设为 codex 的模型菜单
+          {useCatalog ? "（将替换 codex 内置列表；取消勾选并保存即还原）" : "（勾选后替换内置列表）"}
+        </label>
         {models && (
           <div className="flex max-h-32 flex-wrap gap-1.5 overflow-auto rounded-lg border border-[var(--border)] p-2">
             {models.map((m) => (

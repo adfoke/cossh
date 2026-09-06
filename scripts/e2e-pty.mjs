@@ -406,6 +406,39 @@ ok("非法请求没污染 config.toml", /base_url = "http:\/\/127\.0\.0\.1:9\/v1
 await clickEl(`[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='取消')`);
 await sleep(300);
 
+// 思考等级 + 模型菜单目录：写入/清删生命周期（API 级侧证，全程在演练场内）
+{
+  const CFG_API = HEALTH.replace("/api/health", "/api/codex/config");
+  const post = (body) => fetch(CFG_API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+  const CAT = path.join(path.dirname(CODEX_FILES.cfg), "sshx-models.json");
+  await post({ baseUrl: "http://127.0.0.1:9/v1", wireApi: "responses", reasoningEffort: "high", useModelCatalog: true, modelIds: ["e2e-alpha", "e2e beta 有空格"] });
+  const cfgTxt = fs.readFileSync(CODEX_FILES.cfg, "utf8");
+  ok("思考等级写入 model_reasoning_effort", /model_reasoning_effort = "high"/.test(cfgTxt));
+  const cat = fs.existsSync(CAT) ? JSON.parse(fs.readFileSync(CAT, "utf8")) : { models: [] };
+  ok("目录键写入且文件生成", cfgTxt.includes("model_catalog_json") && cfgTxt.includes("sshx-models.json"));
+  ok("目录条目合规且脏模型名被过滤", cat.models.length === 1 && cat.models[0].slug === "e2e-alpha" && cat.models[0].visibility === "list", JSON.stringify(cat.models.map((m) => m.slug)));
+  {
+    const { spawnSync } = await import("node:child_process");
+    const has = spawnSync("codex", ["--version"], { encoding: "utf8" }).status === 0;
+    if (!has) console.log("NOTE  本机无 codex，跳过目录冷启动验收");
+    else {
+      const v = spawnSync("codex", ["debug", "models"], { encoding: "utf8", timeout: 10000, env: { ...process.env, CODEX_HOME: path.dirname(CODEX_FILES.cfg) } });
+      let slugs = [];
+      try { slugs = JSON.parse(v.stdout).models.map((m) => m.slug); } catch { /* 解析失败保持空 */ }
+      ok("生成的目录能被真 codex 冷启动解析", v.status === 0 && slugs.includes("e2e-alpha"), `exit=${v.status} slugs=${slugs.join(",")} err=${String(v.stderr).slice(0, 80)}`);
+    }
+  }
+  await post({ baseUrl: "http://127.0.0.1:9/v1", wireApi: "responses", reasoningEffort: "", useModelCatalog: false });
+  const cfgTxt2 = fs.readFileSync(CODEX_FILES.cfg, "utf8");
+  ok("取消勾选：双键删除、目录文件回收",
+    !cfgTxt2.includes("model_reasoning_effort") && !cfgTxt2.includes("model_catalog_json") && !fs.existsSync(CAT));
+  await clickEl(`[...document.querySelectorAll('button')].find(x=>x.textContent.includes('配置 Codex'))`);
+  await sleep(600);
+  ok("表单含思考等级下拉与菜单勾选框", await evalJs(`!!document.getElementById("codex-effort") && !!document.getElementById("codex-catalog")`));
+  await clickEl(`[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='取消')`);
+  await sleep(300);
+}
+
 /* ── 8d. ↓ 获取模型列表：假网关 + 服务端代理 + 已存 key 兜底 + chip 选模型 ── */
 let lastAuth = "";
 const fakeApi = http.createServer((req, res) => {

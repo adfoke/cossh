@@ -25,6 +25,8 @@ export interface CodexConfigView {
   model: string;
   modelProvider: string;
   wireApi: string;
+  reasoningEffort: string;
+  modelCatalog: boolean;
   hasKey: boolean;
   keyEnvName: string;
   configPath: string;
@@ -39,6 +41,9 @@ export const saveCodexConfig = (body: {
   apiKey?: string;
   model?: string;
   wireApi: string;
+  reasoningEffort?: string;
+  useModelCatalog?: boolean;
+  modelIds?: string[];
 }): Promise<CodexConfigView> =>
   fetch("/api/codex/config", {
     method: "POST",

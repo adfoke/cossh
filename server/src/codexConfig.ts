@@ -1,6 +1,6 @@
 // Codex CLI 配置读写：合并式更新 ~/.codex/config.toml（自定义 provider）+ ~/.codex/.env（密钥）
 // 铁律：① 用户已有的其它配置键必须原样保留；② API key 只进 .env（0600），任何读取接口不回显。
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +10,9 @@ import { parse, stringify } from "smol-toml";
 const CODEX_DIR = process.env.SSHX_CODEX_HOME?.trim() || path.join(os.homedir(), ".codex");
 const CONFIG_PATH = path.join(CODEX_DIR, "config.toml");
 const ENV_PATH = path.join(CODEX_DIR, ".env");
+/** codex 的 model_catalog_json：自定义「模型菜单」目录文件（替换语义，启动时加载） */
+const CATALOG_PATH = path.join(CODEX_DIR, "sshx-models.json");
+const EFFORTS = new Set(["", "minimal", "low", "medium", "high", "xhigh"]);
 
 export const PROVIDER_ID = "sshx";
 const KEY_ENV = "OPENAI_API_KEY";
@@ -20,6 +23,8 @@ export interface CodexConfigView {
   model: string;
   modelProvider: string;
   wireApi: string;
+  reasoningEffort: string;
+  modelCatalog: boolean;
   hasKey: boolean;
   keyEnvName: string;
   configPath: string;
@@ -31,6 +36,9 @@ export interface CodexConfigInput {
   apiKey?: string; // 空/缺省 = 保持已存的 key 不动
   model?: string;
   wireApi?: string;
+  reasoningEffort?: string;      // ""/minimal/low/medium/high/xhigh（""= 删键用默认）
+  useModelCatalog?: boolean;     // true：把 modelIds 写成 codex 模型菜单（替换内置目录）
+  modelIds?: string[];
 }
 
 type Table = Record<string, unknown>;
@@ -88,6 +96,8 @@ export function readCodexConfig(): CodexConfigView {
     model: String(cfg.model ?? ""),
     modelProvider: String(cfg.model_provider ?? ""),
     wireApi: String(p?.["wire_api"] ?? "responses"),
+    reasoningEffort: String(cfg.model_reasoning_effort ?? ""),
+    modelCatalog: !!cfg.model_catalog_json,
     hasKey: env.has(KEY_ENV) || !!process.env[KEY_ENV],
     keyEnvName: KEY_ENV,
     configPath: CONFIG_PATH,
@@ -104,6 +114,8 @@ export function saveCodexConfig(input: CodexConfigInput): CodexConfigView | { er
   if (model && /\s/.test(model)) return { error: "模型名不能含空格" };
   const apiKey = (input.apiKey ?? "").trim();
   if (apiKey && /[\s\r\n]/.test(apiKey)) return { error: "API key 不能含空白字符" };
+  const effort = (input.reasoningEffort ?? "").trim();
+  if (!EFFORTS.has(effort)) return { error: "思考等级只能是 minimal/low/medium/high/xhigh" };
 
   fs.mkdirSync(CODEX_DIR, { recursive: true, mode: 0o700 });
 
@@ -119,6 +131,40 @@ export function saveCodexConfig(input: CodexConfigInput): CodexConfigView | { er
     env_key: KEY_ENV,
     wire_api: wireApi,
   };
+  // ── 思考等级：填了写 model_reasoning_effort，选「默认」则删键回退 ──
+  if (effort) cfg.model_reasoning_effort = effort;
+  else delete cfg.model_reasoning_effort;
+
+  // ── 模型菜单（model_catalog_json）：codex 官方支持指向 JSON 目录，替换内置列表 ──
+  const ids = (Array.isArray(input.modelIds) ? input.modelIds : [])
+    .map((x) => String(x).trim())
+    .filter((x) => x && !/\s/.test(x))
+    .slice(0, 60);
+  if (input.useModelCatalog && ids.length > 0) {
+    const baseInstructions = codexBuiltinBaseInstructions();
+    if (!baseInstructions) return { error: "本机 codex 不可用（读不到内置指令模板），模型菜单暂无法生成——先装 codex 再勾" };
+    const catalog = {
+      models: ids.map((slug, i) => ({
+        base_instructions: baseInstructions,
+        slug,
+        display_name: slug,
+        supported_reasoning_levels: [],
+        shell_type: "default", // codex 反序列化别名 → unified_exec
+        visibility: "list",
+        supported_in_api: true,
+        priority: i,
+        support_verbosity: false,
+        truncation_policy: { mode: "bytes", limit: 10000 },
+        experimental_supported_tools: [],
+      })),
+    };
+    fs.writeFileSync(CATALOG_PATH, JSON.stringify(catalog, null, 2), { mode: 0o644 });
+    cfg.model_catalog_json = CATALOG_PATH;
+  } else {
+    delete cfg.model_catalog_json;
+    fs.rmSync(CATALOG_PATH, { force: true });
+  }
+
   const tmp = CONFIG_PATH + ".tmp";
   fs.writeFileSync(tmp, stringify(cfg), { mode: 0o644 });
   fs.renameSync(tmp, CONFIG_PATH);
@@ -136,6 +182,20 @@ export function saveCodexConfig(input: CodexConfigInput): CodexConfigView | { er
    服务端进程配 SSHX_PROXY（或标准 https_proxy）则直连不通自动退该代理）；
    Authorization 经 curl 配置文件从 stdin 喂入，
    key 不落 argv（ps 看不见）。base_url 支持带/不带 /v1 双候选探测。 ── */
+
+/** 从本机 codex 现取内置 base_instructions（catalog 条目必需；21KB 提示词不进我们仓库，
+ *  永远跟随用户装的那版 codex）。取不到就返回 null，由调用方拒绝开启模型菜单。 */
+function codexBuiltinBaseInstructions(): string | null {
+  try {
+    const r = spawnSync("codex", ["debug", "models"], { encoding: "utf8", timeout: 8000 });
+    if (r.status !== 0) return null;
+    const first = (JSON.parse(r.stdout)?.models ?? [])[0] as Record<string, unknown> | undefined;
+    const bi = first?.base_instructions;
+    return typeof bi === "string" && bi.length > 0 ? bi : null;
+  } catch {
+    return null;
+  }
+}
 
 interface CurlResult {
   ok: boolean;
