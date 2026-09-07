@@ -1,4 +1,4 @@
-# SSHX · 终端画布（sshx-canvas）
+# COSSH · 终端画布（cossh）
 
 浏览器里的**无限画布多终端**。点「＋终端」就是本机一个**真 PTY shell**——
 不是 tmux 快照镜像，是 xterm.js ↔ WebSocket ↔ node-pty 的字节级双向管道：

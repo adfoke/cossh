@@ -405,7 +405,7 @@ function Canvas() {
       <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center">
         <div className="pointer-events-auto max-w-md rounded-3xl border border-[var(--border)] bg-[var(--overlay)]/95 p-7 text-center shadow-2xl backdrop-blur">
           <div className="text-3xl">🖥️</div>
-          <h2 className="mt-2 text-lg font-bold">SSHX · 无限画布上的真终端</h2>
+          <h2 className="mt-2 text-lg font-bold">COSSH · 无限画布上的真终端</h2>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
             点 <b>＋终端</b> 开一个本机真 PTY shell——不是快照镜像，是字节级双向管道：
             vim、htop、ssh 随便跑。开多少个窗口，就是多少个独立进程，

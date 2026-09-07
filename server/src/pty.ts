@@ -66,7 +66,7 @@ export function attachPty(ws: WebSocket, search: URLSearchParams): void {
       })(),
       env: {
         ...process.env,
-        TERM_PROGRAM: "sshx-canvas",
+        TERM_PROGRAM: "cossh",
         PATH: `${SHIM_DIR}:${process.env.PATH ?? "/usr/bin:/bin"}`,
         // macOS 的 /etc/zprofile path_helper 会在登录 shell 里把 PATH 重排回系统序，
         // 光前置等于白做——用 ZDOTDIR 引导壳转源用户真实 rc 后，最后一步把 shim 顶回最前
