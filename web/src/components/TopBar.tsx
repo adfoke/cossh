@@ -18,6 +18,12 @@ export function TopBar({ onAddTerm, onInstallCodex, onWriteCodexRules }: { onAdd
         <Button size="sm" variant="primary" onPress={onAddTerm}>
           ＋终端
         </Button>
+        <Button size="sm" variant="secondary" onPress={() => openOverlay("status")}>
+          📈 状态卡
+        </Button>
+        <Button size="sm" variant="secondary" onPress={() => openOverlay("quick")} aria-label="快捷命令面板">
+          ⚡ 快捷
+        </Button>
         <Button size="sm" variant="secondary" onPress={onInstallCodex}>
           📦 安装 Codex
         </Button>

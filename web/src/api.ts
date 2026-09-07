@@ -8,6 +8,18 @@ export const ptySocketUrl = (cols: number, rows: number, noObserve = false): str
   return `${proto}//${host}:${port}/ws/pty?cols=${cols}&rows=${rows}${noObserve ? "&noobserve=1" : ""}`;
 };
 
+import type { StatusView } from "./types";
+
+/** 状态卡轮询：一切失败（含 HTTP 层）都归一为 ok:false+err，卡片侧永不抛 */
+export const fetchStatus = (host: string, fresh = false): Promise<StatusView> =>
+  fetch(`/api/status?host=${encodeURIComponent(host)}${fresh ? "&fresh=1" : ""}`)
+    .then(async (r) => {
+      const j = (await r.json().catch(() => null)) as unknown;
+      if (j && typeof j === "object" && "ok" in j) return j as StatusView;
+      return { ok: false, host, at: Date.now(), err: `HTTP ${r.status}` } satisfies StatusView;
+    })
+    .catch((e: Error) => ({ ok: false, host, at: Date.now(), err: e?.message ?? String(e) }) satisfies StatusView);
+
 export interface Health {
   ok: boolean;
   ptys: number;

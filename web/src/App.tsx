@@ -14,16 +14,19 @@ import {
 import { CodexConfigOverlay } from "./components/CodexConfigOverlay";
 import { HelpOverlay } from "./components/HelpOverlay";
 import { NoticeOverlay } from "./components/NoticeOverlay";
+import { QuickCommandsOverlay } from "./components/QuickCommandsOverlay";
+import { AddStatusOverlay } from "./components/AddStatusOverlay";
 import { TopBar } from "./components/TopBar";
 import { TermNode } from "./nodes/TermNode";
+import { StatusNode } from "./nodes/StatusNode";
 import { newId } from "./store";
 import { observeSince, writeCodexAgents } from "./api";
 import { useUI } from "./uiStore";
-import type { TermNodeData } from "./types";
+import type { StatusNodeData, TermNodeData } from "./types";
 
 const LS = { nodes: "sshx.canvas.nodes", edges: "sshx.canvas.edges" };
 
-const nodeTypes = { term: TermNode } satisfies NodeTypes;
+const nodeTypes = { term: TermNode, status: StatusNode } satisfies NodeTypes;
 
 /**
  * 安装 Codex CLI 的一次性命令（在真 PTY 窗里自动执行）：
@@ -55,6 +58,16 @@ function makeTermNode(
   };
 }
 
+/** 状态卡节点工厂：host 是唯一必填语义，其余都有默认 */
+function makeStatusNode(position: { x: number; y: number }, host: string, title: string): Node {
+  return {
+    id: newId("status"),
+    type: "status",
+    position,
+    data: { title, host } satisfies StatusNodeData,
+  };
+}
+
 /**
  * 读取持久化画布：只保留 term 节点（老版本的 host/chat 节点直接淘汰），
  * 并顺手清掉旧主机连线数据。data 里的历史字段（hostId/session 等）会被剥掉。
@@ -65,20 +78,39 @@ function loadTermNodes(): Node[] {
     if (!raw) return [];
     const arr = JSON.parse(raw) as Node[];
     return arr
-      .filter((n) => n?.type === "term" && n?.position)
-      .map((n) => ({
-        id: n.id,
-        type: "term" as const,
-        position: n.position,
-        selected: false,
-        data: {
-          title: String((n.data as Partial<TermNodeData>)?.title ?? "终端"),
-          win: (n.data as TermNodeData)?.win,
-          observeHost: (n.data as TermNodeData)?.observeHost,
-          observeSession: (n.data as TermNodeData)?.observeSession,
-          observeUser: (n.data as TermNodeData)?.observeUser,
-        } satisfies TermNodeData,
-      }));
+      .filter((n) => (n?.type === "term" || n?.type === "status") && n?.position)
+      .map((n): Node | null => {
+        if (n.type === "status") {
+          const d = n.data as Partial<StatusNodeData> | undefined;
+          if (!d?.host) return null; // 没 host 的状态卡是残骸，淘汰
+          return {
+            id: n.id,
+            type: "status" as const,
+            position: n.position,
+            selected: false,
+            data: {
+              title: String(d.title ?? d.host),
+              host: d.host,
+              win: d.win,
+              paused: d.paused,
+            } satisfies StatusNodeData,
+          };
+        }
+        return {
+          id: n.id,
+          type: "term" as const,
+          position: n.position,
+          selected: false,
+          data: {
+            title: String((n.data as Partial<TermNodeData>)?.title ?? "终端"),
+            win: (n.data as TermNodeData)?.win,
+            observeHost: (n.data as TermNodeData)?.observeHost,
+            observeSession: (n.data as TermNodeData)?.observeSession,
+            observeUser: (n.data as TermNodeData)?.observeUser,
+          } satisfies TermNodeData,
+        };
+      })
+      .filter((n): n is Node => n != null);
   } catch {
     return [];
   }
@@ -281,8 +313,15 @@ function Canvas() {
       const el = e.target as HTMLElement | null;
       if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return;
       const ui = useUI.getState();
-      if (ui.overlay) return; // 弹层自己的 Esc 由 Overlay 处理
       const meta = e.metaKey || e.ctrlKey;
+      // ⌘K 快捷命令：toggle 语义，能穿透弹层（自己开着时再按即关）
+      if (meta && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (ui.overlay === "quick") ui.close();
+        else ui.openOverlay("quick");
+        return;
+      }
+      if (ui.overlay) return; // 弹层自己的 Esc 由 Overlay 处理
       if (meta && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) redo();
@@ -313,6 +352,14 @@ function Canvas() {
   const installCodex = useCallback(
     () => addTerminal({ title: "安装 Codex CLI", runOnOpen: CODEX_INSTALL_CMD }),
     [addTerminal],
+  );
+  const addStatusNode = useCallback(
+    (host: string, title: string) => {
+      const c = rf.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+      jitter.current = (jitter.current + 48) % 340;
+      rf.addNodes(makeStatusNode({ x: c.x + 40 + jitter.current, y: c.y - 160 + jitter.current }, host, title));
+    },
+    [rf],
   );
   /** 规矩写入走 REST（服务端幂等标记块），成功后开个窗把块内容 sed 出来验货 */
   const writeCodexRules = useCallback(async () => {
@@ -363,6 +410,7 @@ function Canvas() {
             点 <b>＋终端</b> 开一个本机真 PTY shell——不是快照镜像，是字节级双向管道：
             vim、htop、ssh 随便跑。开多少个窗口，就是多少个独立进程，
             在画布上随意摆位、<b>—</b> 最小化（进程不死）、<b>□</b> 最大化、关错了 <b>⌘Z</b> 找回。
+            <b>📈 状态卡</b>盯远端机器健康，<b>⚡ 快捷命令（⌘K）</b>一键塞回你正在用的终端。
           </p>
           <div className="mt-5 flex justify-center gap-2">
             <button
@@ -405,6 +453,8 @@ function Canvas() {
       <HelpOverlay />
       <NoticeOverlay />
       <CodexConfigOverlay />
+      <QuickCommandsOverlay onNewTerminal={(cmd) => addTerminal({ title: "快捷命令", runOnOpen: cmd })} />
+      <AddStatusOverlay onCreate={addStatusNode} />
     </div>
   );
 }

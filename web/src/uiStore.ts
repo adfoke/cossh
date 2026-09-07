@@ -1,7 +1,7 @@
 // UI 弹层状态（小颗粒 store，避免 App 巨型 state）
 import { create } from "zustand";
 
-export type OverlayName = "help" | "codex" | "notice" | null;
+export type OverlayName = "help" | "codex" | "notice" | "quick" | "status" | null;
 
 interface UIState {
   overlay: OverlayName;

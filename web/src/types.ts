@@ -13,3 +13,37 @@ export type TermNodeData = {
   observeSession?: string;
   observeUser?: string;
 }
+
+/* ── 状态卡：/api/status 的视图镜像（字段与 server/src/status.ts 对齐） ── */
+export interface StatusDisk { mount: string; totalMb: number; usedMb: number; pct: number }
+export interface StatusNet { name: string; rxRateKbps: number | null; txRateKbps: number | null }
+export interface StatusProc { pid: number; user: string; cpuPct: number; memPct: number; command: string }
+export interface StatusView {
+  ok: boolean;
+  host: string;
+  at: number;
+  err?: string;
+  os?: string;
+  hostname?: string;
+  user?: string;
+  uptimeSec?: number;
+  load?: number[];
+  cpus?: number;
+  cpuPct?: number | null;
+  memTotalKb?: number;
+  memUsedKb?: number;
+  memUsedPct?: number | null;
+  disks?: StatusDisk[];
+  nets?: StatusNet[];
+  procs?: StatusProc[];
+  docker?: { running: number; total: number } | null;
+}
+
+export type StatusNodeData = {
+  title: string;
+  /** ssh 目标（[user@]host），状态卡每次轮询都拿它打 /api/status */
+  host: string;
+  win?: WindowState;
+  /** 暂停轮询：卡片定格在最后一次成功数据（排查时不想被刷新打断） */
+  paused?: boolean;
+}

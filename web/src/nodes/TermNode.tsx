@@ -3,6 +3,7 @@ import { useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { ptySocketUrl } from "../api";
+import { registerTerm, touchTerm } from "../termBus";
 import { MinimizedBody, useWindow, WindowButtons } from "../lib/window";
 import type { TermNodeData, WindowState } from "../types";
 
@@ -21,6 +22,9 @@ export function TermNode({ id, data, selected }: NodeProps<TermFlowNode>) {
   const [link, setLink] = useState<Link>("connecting");
   const [errMsg, setErrMsg] = useState("");
   const [pid, setPid] = useState<number | null>(null);
+  // termBus 要的活标题：data 变了不重跑 effect，用 ref 保证注入面板拿到的标题是新鲜的
+  const titleRef = useRef(data.title);
+  titleRef.current = data.title;
 
   // 挂载即开一个 PTY；deps 故意为空——改标题/最小化/最大化都不能重连，
   // 否则敲一半的命令会被自己的 UI 操作掐死
@@ -59,6 +63,16 @@ export function TermNode({ id, data, selected }: NodeProps<TermFlowNode>) {
       setLink("error");
       setErrMsg("WebSocket 创建失败");
     }
+
+    // termBus 注册：快捷命令面板经它注入本窗；开窗即 touch（新窗 = 默认注入目标）
+    const unregister = registerTerm(id, {
+      title: () => titleRef.current,
+      write: (t) => {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(enc.encode(t));
+      },
+      isLive: () => ws !== null && ws.readyState === WebSocket.OPEN,
+    });
+    touchTerm(id);
 
     if (ws) {
       ws.onopen = () => {
@@ -111,6 +125,7 @@ export function TermNode({ id, data, selected }: NodeProps<TermFlowNode>) {
 
     // 键盘输入 → binary 帧 → PTY stdin（文本帧被协议保留给 JSON 控制）
     const inputDisp = term.onData((raw) => {
+      touchTerm(id); // 敲了字 = 用户正在用它，注入顺位顶到第一
       if (ws && ws.readyState === WebSocket.OPEN) ws.send(enc.encode(raw));
     });
 
@@ -141,6 +156,7 @@ export function TermNode({ id, data, selected }: NodeProps<TermFlowNode>) {
       ro.disconnect();
       window.clearTimeout(sizeTimer);
       inputDisp.dispose();
+      unregister();
       ws?.close();
       term.dispose();
     };
@@ -188,7 +204,12 @@ export function TermNode({ id, data, selected }: NodeProps<TermFlowNode>) {
       {minimized && <MinimizedBody label={data.title} onOpen={() => patchWin("normal")} />}
       {/* 终端画面（最小化只隐藏不卸载：保住 ws、缓冲和正在跑的前台进程） */}
       <div className={`relative min-h-0 flex-1 bg-[#0c0e13] ${minimized ? "hidden" : ""}`}>
-        <div ref={containerRef} className="term-host nodrag" onDoubleClick={(e) => e.stopPropagation()} />
+        <div
+          ref={containerRef}
+          className="term-host nodrag"
+          onDoubleClick={(e) => e.stopPropagation()}
+          onPointerDown={() => touchTerm(id)}
+        />
         {link === "error" && errMsg && (
           <div className="absolute right-2 bottom-2 left-2 rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] text-rose-400">{errMsg}</div>
         )}

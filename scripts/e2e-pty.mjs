@@ -96,11 +96,15 @@ const health = async () => (await fetch(HEALTH)).json();
 const addTermBtn = `[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='＋终端')`;
 
 /* ── pid → nodeId 寻的层 ── */
-const nodePidMap = () =>
-  evalJs(`(() => { const out = []; for (const n of window.__sshxRf.getNodes()) {
+const SEEN_PIDS = new Set(); // 本测试亲眼见过的所有 shell pid（OS 级收割断言用，不信服务端账本）
+const nodePidMap = async () => {
+  const arr = await evalJs(`(() => { const out = []; for (const n of window.__sshxRf.getNodes()) {
     const el = document.querySelector('.react-flow__node[data-id="' + n.id + '"]');
     const m = el?.textContent.match(/⌗(\\d+)/); out.push({ id: n.id, pid: m ? m[1] : null, title: n.data?.title });
   } return out; })()`);
+  for (const n of arr ?? []) if (n?.pid) SEEN_PIDS.add(Number(n.pid));
+  return arr;
+};
 /** 读某节点终端 buffer 全文 */
 const screenOf = (nid) => `(() => {
   const el = document.querySelector('.react-flow__node[data-id="${nid}"] .term-host');
@@ -654,6 +658,122 @@ await evalJs(`window.dispatchEvent(new KeyboardEvent('keydown',{key:'z',metaKey:
 await sleep(1800);
 ok("⇧⌘Z 重做回到整齐态", (await overlaps()).bad === 0);
 
+/* ── 13. ⚡ 快捷命令：⌘K 面板 CRUD + 注入聚焦窗 + 无活窗兜底开新窗 ── */
+const K = "e2eqk" + Math.random().toString(36).slice(2, 6);
+const QNAME = "e2e-" + K;
+const QCMD = `echo ${K}_MARK`;
+const pressCmdK = async () => {
+  await evalJs(`window.dispatchEvent(new KeyboardEvent('keydown',{key:'k',metaKey:true,bubbles:true}))`);
+  await sleep(250);
+};
+const qcRowCount = () => evalJs(`document.querySelectorAll('[data-qc-row]').length`);
+const qcRowOf = (name) =>
+  `[...document.querySelectorAll('[data-qc-row]')].find(r=>r.textContent.includes(${JSON.stringify(name)}))`;
+await pressCmdK();
+ok("⌘K 唤起快捷命令面板", (await evalJs(`!!document.querySelector('[data-qc-overlay]')`)) === true);
+await clickEl(`document.querySelector('button[aria-label="新建快捷命令"]')`);
+await sleep(200);
+await setField("qc-name", QNAME);
+await setField("qc-cmd", QCMD);
+await clickEl(`document.querySelector('button[aria-label="qc-save"]')`);
+await sleep(300);
+ok("保存后回列表且行在位", (await evalJs(`(${qcRowOf(QNAME)} ? 1 : 0)`)) === 1);
+ok("命令落 localStorage 持久化", String(await evalJs(`localStorage.getItem("sshx.quickCommands") ?? ""`)).includes(`${K}_MARK`));
+// 执行目标 = 最后敲过字的活窗：先关面板（modal 遮罩会截走 TopBar 的真鼠标事件），
+// 开一扇新终端（注册即 touch，MRU 第一），再 ⌘K 回来执行
+await pressCmdK(); // 面板此刻开着 → 再按 ⌘K 收起
+await sleep(250);
+const nPre13 = await rfCount();
+await clickEl(addTermBtn);
+await sleep(700);
+const all13 = await nodePidMap();
+const QT = all13[all13.length - 1];
+ok("执行用的专用终端已就绪", all13.length === nPre13 + 1 && !!QT?.id, JSON.stringify({ nPre13, got: QT }));
+if (!QT?.id) throw new Error("section 13: 新终端没开出来，后面全空转");
+await focusTerm(QT.id);
+await pressCmdK();
+await clickEl(`(${qcRowOf(QNAME)})?.querySelector('[data-qc-run]')`);
+await sleep(400);
+ok("执行后面板自动收起（不挡终端视野）", (await evalJs(`!!document.querySelector('[data-qc-overlay]')`)) === false);
+const scr13 = await waitScreen(QT.id, new RegExp(`${K}_MARK`), 6000);
+ok("命令注入到聚焦终端并已执行", !!scr13);
+// 无活终端兜底：全部窗下 → ▶ 自动开「快捷命令」新窗跑
+await evalJs(`window.__sshxRf.setNodes([])`);
+await sleep(500);
+await pressCmdK();
+await clickEl(`document.querySelector('[data-qc-row] [data-qc-run]')`);
+await sleep(1000);
+const mQ2 = await nodePidMap();
+const QT2 = mQ2[0];
+ok("无活终端时自动开新窗执行", mQ2.length === 1 && String(QT2?.title) === "快捷命令", JSON.stringify(mQ2));
+const scr13b = await waitScreen(QT2?.id ?? "", new RegExp(`${K}_MARK`), 8000);
+ok("新窗里命令真跑了", !!scr13b);
+// 编辑与删除
+await pressCmdK();
+await clickEl(`(${qcRowOf(QNAME)})?.querySelector('[aria-label="qc-edit"]')`);
+await sleep(200);
+await setField("qc-name", QNAME + "B");
+await clickEl(`document.querySelector('button[aria-label="qc-save"]')`);
+await sleep(250);
+ok("编辑改名生效", (await evalJs(`(${qcRowOf(QNAME + "B")} ? 1 : 0)`)) === 1);
+// 面板此时本就开着（保存后回列表）——别再 ⌘K，会把面板toggle关了把行下掉
+await clickEl(`(${qcRowOf(QNAME + "B")})?.querySelector('button[aria-label^=\"\u5220\u9664 \"]')`);
+await sleep(250);
+ok("删除后行消失且 LS 同步", (await qcRowCount()) === 0 && !String(await evalJs(`localStorage.getItem("sshx.quickCommands") ?? ""`)).includes(QNAME));
+await pressCmdK(); // 关掉面板再收场：别让 modal 遮罩截走 14 段的 TopBar 点击
+await sleep(250);
+// 注意：绝不在此清空画布——收尾段靠「活终端数严格下降」证明无泄漏，
+// 清空后 hPreLeave=0 会让该断言结构性必红（run6 实录）。本段终端留给收割。
+
+/* ── 14. 📈 状态卡：白名单硬拒注入 +（有测试机时）真机采集全链 ── */
+const HEALTH_BASE = "http://127.0.0.1:8787";
+const badHosts = ["root@a;rm -rf /", "-oProxyCommand=touch /tmp/pwned", "a b"];
+const badRes = [];
+for (const bh of badHosts) {
+  const r = await fetch(`${HEALTH_BASE}/api/status?host=${encodeURIComponent(bh)}`);
+  badRes.push({ s: r.status, e: (await r.json()).err });
+}
+ok("状态 API 对注入形态 host 全拒 400", badRes.every((x) => x.s === 400 && x.e === "invalid host"), JSON.stringify(badRes));
+ok("注入 host 未被执行（/tmp/pwned 不存在）", !fs.existsSync("/tmp/pwned"));
+const VPS3 = process.env.SSHX_E2E_SSH_HOST ?? "";
+const SH3 = VPS3.includes("@") || !VPS3 ? VPS3 : `root@${VPS3}`;
+const { spawnSync: sp3 } = await import("node:child_process");
+const probe3 = SH3
+  ? sp3("ssh", ["-o", "ControlMaster=auto", "-o", "ControlPath=/tmp/sshx-e2e-cm", "-o", "ControlPersist=120", "-o", "BatchMode=yes", "-o", "ConnectTimeout=6", SH3, "echo up"], { encoding: "utf8" })
+  : { stdout: "" };
+if (!SH3 || probe3.stdout?.trim() !== "up") {
+  console.log(SH3 ? "SKIP  14 真机段（SSHX_E2E_SSH_HOST 不可达）" : "SKIP  14 真机段（未配 SSHX_E2E_SSH_HOST）");
+} else {
+  await clickEl(`[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='📈 状态卡')`);
+  await sleep(250);
+  await setField("status-host", SH3);
+  await clickEl(`document.querySelector('[data-status-create]')`);
+  await sleep(400);
+  ok("状态卡节点落画布", (await evalJs(`document.querySelectorAll('[data-status-node]').length`)) === 1);
+  let stState = "";
+  for (let i = 0; i < 30 && stState !== "ok"; i++) {
+    await sleep(1000);
+    stState = String(await evalJs(`document.querySelector('[data-status-node]')?.dataset.statusState ?? ""`));
+  }
+  ok("真机：30s 内首采成功（state=ok）", stState === "ok", stState);
+  const stBody = String(await evalJs(`document.querySelector('[data-status-node]')?.textContent ?? ""`));
+  ok("卡面含 CPU/MEM 采样值", /CPU/.test(stBody) && /MEM/.test(stBody) && /\d+(\.\\d)?%/.test(stBody), stBody.slice(0, 120));
+  ok("卡面含 up 时长与 top 进程区", /up /.test(stBody) && /TOP/.test(stBody), stBody.slice(0, 160));
+  // 缓存去重：TTL 内连打两发必须拿到同一份 at（没多花一次 ssh）
+  const f2 = await (await fetch(`${HEALTH_BASE}/api/status?host=${encodeURIComponent(SH3)}`)).json();
+  const f3 = await (await fetch(`${HEALTH_BASE}/api/status?host=${encodeURIComponent(SH3)}`)).json();
+  ok("TTL 内连击共享同一次采集（缓存去重）", f2.ok === true && f2.at === f3.at, JSON.stringify({ a: f2.at, b: f3.at }));
+  await clickEl(`document.querySelector('[data-status-node] button[aria-label="pause-polling"]')`);
+  await sleep(200);
+  ok("⏸ 定格生效（state=paused，轮询停）", (await evalJs(`document.querySelector('[data-status-node]').dataset.statusState`)) === "paused");
+  await goto(APP); // 刷新：状态卡经迁移函数原位复活
+  await sleep(1600);
+  ok("刷新后状态卡持久复活", (await evalJs(`document.querySelectorAll('[data-status-node]').length`)) === 1);
+  await clickEl(`document.querySelector('[data-status-node] button[aria-label="close"]')`);
+  await sleep(300);
+  ok("✕ 关闭状态卡", (await evalJs(`document.querySelectorAll('[data-status-node]').length`)) === 0);
+}
+
 /* ── 9. 收尾：离开页面 → 本测试的 shell 全部收割 ── */
 const hPreLeave = (await health()).ptys;
 // 正常导航即时 close 走 dispose；若网络进程卡住半开连接，则由 hb 断流清扫（≤15s）兜底
@@ -663,6 +783,9 @@ await goto("about:blank");
 let hEnd = await health();
 for (let i = 0; i < 35 && hEnd.ptys >= hPreLeave; i++) { await sleep(1000); hEnd = await health(); }
 ok("页面关闭后本测试的 shell 全收割（直连 close 或 hb 清扫兜底）", hEnd.ptys < hPreLeave, `pre=${hPreLeave} end=${JSON.stringify(hEnd)}`);
+await sleep(1500); // 给 node-pty 回收窗口，避开 kill 后短暂的僵尸态误报
+const leakedOs = [...SEEN_PIDS].filter((p) => { try { process.kill(p, 0); return true; } catch { return false; } });
+ok(`OS 级：本测试开过的 ${SEEN_PIDS.size} 个 shell 全部真死（账本外证据，dispose 吞 kill 必红）`, leakedOs.length === 0, JSON.stringify(leakedOs));
 
 ws.close();
 console.log(failures === 0 ? "\nALL PASS ✅" : `\n${failures} FAILED ❌`);

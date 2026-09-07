@@ -9,6 +9,7 @@ import { WebSocketServer } from "ws";
 import { attachPty, beatStale, killAllPtys, liveCount } from "./pty.ts";
 import { fetchCodexModels, readCodexConfig, saveCodexConfig, type CodexConfigInput } from "./codexConfig.ts";
 import { clearObserve, observeSince, reportObserve } from "./observe.ts";
+import { getStatus, isValidStatusHost } from "./status.ts";
 import { agentsRuleState, writeAgentsRule } from "./codexAgents.ts";
 
 const PORT = Number(process.env.SSHX_PORT ?? 8787);
@@ -55,6 +56,18 @@ app.get("/api/observe/since", (req, res) => {
 app.post("/api/observe/clear", (_req, res) => {
   clearObserve();
   res.json({ ok: true });
+});
+
+/* ── 服务器状态卡：单次 ssh 采集脚本 → 指标 JSON（缓存+连接复用，详见 status.ts 头注） ── */
+app.get("/api/status", async (req, res) => {
+  const host = String(req.query.host ?? "").trim();
+  // 它会被拼进 ssh argv——不过白名单直接 400，绝不把脏字符串递给子进程
+  if (!isValidStatusHost(host)) {
+    res.status(400).json({ ok: false, host, at: Date.now(), err: "invalid host" });
+    return;
+  }
+  const data = await getStatus(host, { fresh: req.query.fresh === "1" });
+  res.json(data);
 });
 
 /* 生产单端口模式：web 侧 npm run build 产出 web/dist 后，本服务直接托管静态资源——
