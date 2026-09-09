@@ -202,8 +202,10 @@ export function TermNode({ id, data, selected }: NodeProps<TermFlowNode>) {
       </div>
 
       {minimized && <MinimizedBody label={data.title} onOpen={() => patchWin("normal")} />}
-      {/* 终端画面（最小化只隐藏不卸载：保住 ws、缓冲和正在跑的前台进程） */}
-      <div className={`relative min-h-0 flex-1 bg-[#0c0e13] ${minimized ? "hidden" : ""}`}>
+      {/* 终端画面（最小化只隐藏不卸载：保住 ws、缓冲和正在跑的前台进程）
+          nowheel：React Flow 见到它就把滚轮让给 xterm——鼠标在终端里 = 只滚终端，
+          不再顺带缩放画布（双指滑动同时滚+缩放就是这个没挡） */}
+      <div className={`nowheel relative min-h-0 flex-1 bg-[#0c0e13] ${minimized ? "hidden" : ""}`}>
         <div
           ref={containerRef}
           className="term-host nodrag"
