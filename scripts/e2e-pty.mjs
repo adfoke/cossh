@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 
 const DEBUG = "http://127.0.0.1:9222";
-const APP = "http://127.0.0.1:5173/";
+const APP = "http://localhost:5173/"; // vite 默认只听 IPv6 ::1，127.0.0.1 会 goto timeout（与 README、e2e-theme 统一用 localhost）
 const HEALTH = "http://127.0.0.1:8787/api/health";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
