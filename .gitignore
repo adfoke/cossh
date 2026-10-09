@@ -4,6 +4,3 @@ dist/
 node_modules/
 .alma-snapshots
 tsconfig.tsbuildinfo
-# 运行期由引导壳生成的私人产物，绝不入库
-server/shims/zdot/.zsh_history
-server/shims/zdot/.zcompdump*

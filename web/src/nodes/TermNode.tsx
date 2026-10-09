@@ -12,7 +12,7 @@ type Link = "connecting" | "live" | "closed" | "error";
 
 /**
  * 真 PTY 终端窗：xterm.js ↔ WebSocket ↔ node-pty（本机 shell）。
- * 与旧「观察窗」的本质区别：这里不是 tmux 快照镜像，而是字节级双向管道，
+ * 不是 tmux 快照镜像，而是字节级双向管道，
  * vim/htop/ssh 等全屏程序都能直接用。
  */
 export function TermNode({ id, data, selected }: NodeProps<TermFlowNode>) {
@@ -31,13 +31,8 @@ export function TermNode({ id, data, selected }: NodeProps<TermFlowNode>) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    // 自举命令两来源：一次性 runOnOpen（发完即焚）/ 观察窗 attach（observeHost 在，每次就绪都跑，
-    // 刷新后也要重新贴上去围观）
-    const observeCmd =
-      data.observeHost && data.observeSession
-        ? `ssh -t ${data.observeUser ? data.observeUser + "@" : ""}${data.observeHost} tmux new -As ${data.observeSession}`
-        : undefined;
-    const runOnce = data.runOnOpen ?? observeCmd;
+    // 一次性自举命令：终端就绪后自动输入执行，发完即焚（见下方 onopen）
+    const runOnce = data.runOnOpen;
 
     const term = new Terminal({
       cursorBlink: true,
@@ -57,7 +52,7 @@ export function TermNode({ id, data, selected }: NodeProps<TermFlowNode>) {
     let disposed = false;
     let ws: WebSocket | null = null;
     try {
-      ws = new WebSocket(ptySocketUrl(term.cols, term.rows, !!data.observeHost));
+      ws = new WebSocket(ptySocketUrl(term.cols, term.rows));
       ws.binaryType = "arraybuffer";
     } catch {
       setLink("error");
@@ -79,7 +74,7 @@ export function TermNode({ id, data, selected }: NodeProps<TermFlowNode>) {
         if (disposed) return;
         setLink("live");
         term.focus();
-        // 一次性自举命令（如「安装 Codex」）：等登录 shell 的 rc 跑完再喂，
+        // 一次性自举命令（如快捷命令面板投递的指令）：等登录 shell 的 rc 跑完再喂，
         // 投递即销毁 node.data 里的字段——刷新/重开不会再跑第二遍
         if (runOnce && !runSentRef.current) {
           runSentRef.current = true;

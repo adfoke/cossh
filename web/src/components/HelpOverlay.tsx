@@ -18,17 +18,6 @@ export function HelpOverlay() {
             每个窗口都是这台机器上的一个<b>真 PTY shell</b>（xterm.js ↔ WebSocket ↔ node-pty），
             字节级双向管道——vim / htop / ssh / less 这类全屏程序都能直接跑。
             标题栏上的 ⌗ 数字就是它的进程 pid。
-            旁边「📦 安装 Codex」开一个一次性安装窗：先查本机有没有 codex，缺了才 npm 全局装；
-            命令投递后自动从窗口数据里抹除，刷新重开不会跑第二遍。
-            「🔑 配置 Codex」是表单窗：填 API 地址 / Key / 模型 / 协议，服务端<b>合并写</b>
-            ~/.codex/config.toml（你已有的其它配置键原样保留），key 存 ~/.codex/.env（0600），
-            界面和接口都只字不回显；留空 Key 再保存 = 保持原 key 不动。
-            模型旁「↓ 获取」由服务端代发请求拉模型列表（避开 CORS，直连不通自动退 SSHX_PROXY 代理（若已配置）），
-            点列表里的 chip 就填进模型框。
-            走远端 tmux 干活时（send-keys/capture-pane），只要命令里出现 tmux，画布会自动拉起 👀 观察窗
-            贴上那台机器的会话——codex 敲什么实时可见，也能随时抢键盘。
-            想让 codex 懂这规矩？项目里的 <b>AGENTS.md</b> 已随仓库走（clone 即生效）；
-            「📜 Codex 规矩」按钮再把它幂等写进 ~/.codex/AGENTS.md 全局生效，点几次都不重复堆。
           </p>
         </div>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--background-tertiary)] p-3">

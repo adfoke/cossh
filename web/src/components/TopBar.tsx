@@ -1,7 +1,7 @@
 import { Button, useTheme } from "@heroui/react";
 import { useUI } from "../uiStore";
 
-export function TopBar({ onAddTerm, onInstallCodex, onWriteCodexRules }: { onAddTerm: () => void; onInstallCodex: () => void; onWriteCodexRules: () => void }) {
+export function TopBar({ onAddTerm }: { onAddTerm: () => void }) {
   const openOverlay = useUI((s) => s.openOverlay);
   const { theme, resolvedTheme, setTheme } = useTheme("dark");
 
@@ -23,15 +23,6 @@ export function TopBar({ onAddTerm, onInstallCodex, onWriteCodexRules }: { onAdd
         </Button>
         <Button size="sm" variant="secondary" onPress={() => openOverlay("quick")} aria-label="快捷命令面板">
           ⚡ 快捷
-        </Button>
-        <Button size="sm" variant="secondary" onPress={onInstallCodex}>
-          📦 安装 Codex
-        </Button>
-        <Button size="sm" variant="secondary" onPress={() => openOverlay("codex")}>
-          🔑 配置 Codex
-        </Button>
-        <Button size="sm" variant="secondary" onPress={onWriteCodexRules}>
-          📜 Codex 规矩
         </Button>
         <Button size="sm" variant="ghost" onPress={() => openOverlay("help")}>
           用法

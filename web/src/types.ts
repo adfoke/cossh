@@ -7,11 +7,6 @@ export type TermNodeData = {
   win?: WindowState;
   /** 一次性自举命令：终端就绪后自动输入执行，发完即从 data 抹除（刷新不重跑） */
   runOnOpen?: string;
-  /** 观察窗标记：来自「远端 tmux 被驱动」事件；每次就绪自动 attach（与 runOnOpen 不同，跨刷新常驻），
-   *  且其 PTY 带 SSHX_NO_OBSERVE 抑制，防止 attach 命令再触发上报形成回声环 */
-  observeHost?: string;
-  observeSession?: string;
-  observeUser?: string;
 }
 
 /* ── 状态卡：/api/status 的视图镜像（字段与 server/src/status.ts 对齐） ── */

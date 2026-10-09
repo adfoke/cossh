@@ -1,5 +1,5 @@
 // ＋状态卡弹窗：只要一个 ssh 目标（[user@]host）。前提走系统 ssh——
-// 免密、跳板、ProxyCommand 隧道全部透明复用（和 👀 观察窗一个哲学：不养第二套凭据）。
+// 免密、跳板、ProxyCommand 隧道全部透明复用：这里不养第二套凭据。
 import { useMemo, useState } from "react";
 import { Button } from "@heroui/react";
 import { useUI } from "../uiStore";

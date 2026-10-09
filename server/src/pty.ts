@@ -4,18 +4,9 @@
 //   服务端 → 客户端：binary 帧 = PTY 输出；text 帧 = JSON 状态（exit/error）
 // 安全前提：整个服务只绑 127.0.0.1，PTY 即本人本机 shell，不对外暴露。
 import fs from "node:fs";
-import { fileURLToPath } from "node:url";
 import type { WebSocket } from "ws";
 import * as nodePty from "node-pty";
 import type { IPty } from "node-pty";
-
-// ssh PATH shim 目录：前置进每个 PTY 的 PATH，捕获「codex 在驱动远端 tmux」的信号
-const SHIM_DIR = fileURLToPath(new URL("../shims", import.meta.url));
-try {
-  fs.chmodSync(SHIM_DIR + "/ssh", 0o755); // 防 npm 沙箱剥执行位（spawn-helper 同坑）
-} catch {
-  /* 文件缺失则放弃注入，不炸服务 */
-}
 
 const LIVE = new Map<number, IPty>(); // pid → 进程（服务端退出时统一收割）
 
@@ -59,7 +50,7 @@ export function attachPty(ws: WebSocket, search: URLSearchParams): void {
       name: "xterm-256color",
       cols,
       rows,
-      // SSHX_TERM_CWD：终端开局目录（codex 信任边界跟着它收窄；目录不存在则回落 HOME）
+      // SSHX_TERM_CWD：终端开局目录（目录不存在则回落 HOME）
       cwd: (() => {
         const want = process.env.SSHX_TERM_CWD?.trim();
         return want && fs.existsSync(want) ? want : (process.env.HOME ?? process.cwd());
@@ -67,15 +58,6 @@ export function attachPty(ws: WebSocket, search: URLSearchParams): void {
       env: {
         ...process.env,
         TERM_PROGRAM: "cossh",
-        PATH: `${SHIM_DIR}:${process.env.PATH ?? "/usr/bin:/bin"}`,
-        // macOS 的 /etc/zprofile path_helper 会在登录 shell 里把 PATH 重排回系统序，
-        // 光前置等于白做——用 ZDOTDIR 引导壳转源用户真实 rc 后，最后一步把 shim 顶回最前
-        ZDOTDIR: `${SHIM_DIR}/zdot`,
-        SSHX_REAL_ZDOTDIR: process.env.ZDOTDIR || process.env.HOME || "~",
-        SSHX_SHIM_DIR: SHIM_DIR,
-        SSHX_CONTROL_URL: `http://127.0.0.1:${process.env.SSHX_PORT ?? 8787}`,
-        // 观察窗自己带抑制标记：它的 attach 命令再进 shim 就是回声环
-        ...(search.get("noobserve") ? { SSHX_NO_OBSERVE: "1" } : {}),
       } as Record<string, string>,
     });
   } catch (e) {

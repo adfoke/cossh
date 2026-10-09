@@ -2,7 +2,7 @@
   "name": "cossh",
   "private": true,
   "version": "0.1.0",
-  "description": "无限画布本机终端：每个窗口都是真 PTY shell，内置 Codex CLI 安装/配置与远端 tmux 自动观察窗（127.0.0.1 only）",
+  "description": "无限画布本机终端：每个窗口都是真 PTY shell（127.0.0.1 only）",
   "workspaces": [
     "web",
     "server"

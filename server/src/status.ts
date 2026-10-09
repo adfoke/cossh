@@ -1,6 +1,6 @@
 // 服务器状态采集：GET /api/status?host= → 单次 ssh 跑 POSIX 采集脚本 → 结构化指标。
 // 设计约束（都是踩过坑的）：
-//  - host 严格白名单正则：它会被拼进 ssh argv，必须掐死注入面（observe.ts 同款思路）；
+//  - host 严格白名单正则：它会被拼进 ssh argv，必须掐死注入面；
 //  - ControlMaster 复用连接：5s 轮询如果每次新建 TCP，等于对目标机发动连接风暴（sshguard 实锤过）；
 //  - 每 host 缓存 + in-flight 去重 + 最小刷新间隔：同主机多个状态卡共享一次 ssh；
 //  - 失败也进缓存（短 TTL）：机器没配 key/挂了时不至于把 ssh 打成弹幕。

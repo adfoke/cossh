@@ -11,7 +11,6 @@ import {
   type Node,
   type NodeTypes,
 } from "@xyflow/react";
-import { CodexConfigOverlay } from "./components/CodexConfigOverlay";
 import { HelpOverlay } from "./components/HelpOverlay";
 import { NoticeOverlay } from "./components/NoticeOverlay";
 import { QuickCommandsOverlay } from "./components/QuickCommandsOverlay";
@@ -20,7 +19,6 @@ import { TopBar } from "./components/TopBar";
 import { TermNode } from "./nodes/TermNode";
 import { StatusNode } from "./nodes/StatusNode";
 import { newId } from "./store";
-import { observeSince, writeCodexAgents } from "./api";
 import { useUI } from "./uiStore";
 import type { StatusNodeData, TermNodeData } from "./types";
 
@@ -28,23 +26,10 @@ const LS = { nodes: "sshx.canvas.nodes", edges: "sshx.canvas.edges" };
 
 const nodeTypes = { term: TermNode, status: StatusNode } satisfies NodeTypes;
 
-/**
- * 安装 Codex CLI 的一次性命令（在真 PTY 窗里自动执行）：
- * 先查本机有没有 codex，没有才走 npm 全局装。
- * 代理不做任何硬编码：走用户 shell 自己的 npm 配置（.npmrc / *_proxy env）。
- */
-export const CODEX_INSTALL_CMD = [
-  'if command -v codex >/dev/null 2>&1; then',
-  'echo "✅ codex 已装过：$(command -v codex)"; codex --version 2>&1 | head -n1;',
-  'else echo "📦 未检测到 codex，npm 全局安装 @openai/codex …";',
-  'npm install -g @openai/codex',
-  '&& echo "✅ 安装完成" || echo "❌ 安装失败（见上方 npm 报错）"; codex --version 2>&1 | head -n1; fi',
-].join(" ");
-
 /** 画布上唯一的节点：真 PTY 终端窗 */
 function makeTermNode(
   position: { x: number; y: number },
-  opts?: { title?: string; runOnOpen?: string; observeHost?: string; observeSession?: string; observeUser?: string },
+  opts?: { title?: string; runOnOpen?: string },
 ): Node {
   return {
     id: newId("term"),
@@ -53,7 +38,6 @@ function makeTermNode(
     data: {
       title: opts?.title ?? `终端 ${newId("t").slice(2, 6)}`,
       ...(opts?.runOnOpen ? { runOnOpen: opts.runOnOpen } : {}),
-      ...(opts?.observeHost ? { observeHost: opts.observeHost, observeSession: opts.observeSession, observeUser: opts.observeUser } : {}),
     } satisfies TermNodeData,
   };
 }
@@ -104,9 +88,6 @@ function loadTermNodes(): Node[] {
           data: {
             title: String((n.data as Partial<TermNodeData>)?.title ?? "终端"),
             win: (n.data as TermNodeData)?.win,
-            observeHost: (n.data as TermNodeData)?.observeHost,
-            observeSession: (n.data as TermNodeData)?.observeSession,
-            observeUser: (n.data as TermNodeData)?.observeUser,
           } satisfies TermNodeData,
         };
       })
@@ -342,16 +323,12 @@ function Canvas() {
 
   /** 在视口中心附近落一个新终端（抖动防完全重叠） */
   const addTerminal = useCallback(
-    (opts?: { title?: string; runOnOpen?: string; observeHost?: string; observeSession?: string; observeUser?: string }) => {
+    (opts?: { title?: string; runOnOpen?: string }) => {
       const c = rf.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
       jitter.current = (jitter.current + 48) % 340;
       rf.addNodes(makeTermNode({ x: c.x - 240 + jitter.current, y: c.y - 180 + jitter.current }, opts));
     },
     [rf],
-  );
-  const installCodex = useCallback(
-    () => addTerminal({ title: "安装 Codex CLI", runOnOpen: CODEX_INSTALL_CMD }),
-    [addTerminal],
   );
   const addStatusNode = useCallback(
     (host: string, title: string) => {
@@ -361,43 +338,6 @@ function Canvas() {
     },
     [rf],
   );
-  /** 规矩写入走 REST（服务端幂等标记块），成功后开个窗把块内容 sed 出来验货 */
-  const writeCodexRules = useCallback(async () => {
-    try {
-      const r = await writeCodexAgents();
-      addTerminal({
-        title: "Codex 规矩",
-        runOnOpen: `sed -n '/sshx:remote-tmux:start/,/sshx:remote-tmux:end/p' ${JSON.stringify(r.path)} && echo "✅ ${r.created ? "已创建" : "已更新"}（重复点击只替换标记块，不堆重复）"`,
-      });
-    } catch (e) {
-      window.alert(`写入失败：${(e as Error).message}`);
-    }
-  }, [addTerminal]);
-
-  /* ───── 观察事件轮询：ssh shim 报「远端 tmux 被驱动」→ 自动拉起 👀 观察窗 ───── */
-  const observeCursor = useRef(0);
-  useEffect(() => {
-    const t = window.setInterval(() => {
-      void observeSince(observeCursor.current).then(({ events, latest }) => {
-        observeCursor.current = latest; // 对齐权威游标；服务端重启会 stale 重放，key 去重兜底
-        for (const e of events) {
-          const dup = rf
-            .getNodes()
-            .some((n) => (n.data as TermNodeData).observeHost === e.host && (n.data as TermNodeData).observeSession === e.session);
-          if (dup) continue;
-          addTerminal({
-            title: `👀 ${e.user ? e.user + "@" : ""}${e.host}:${e.session}`,
-            observeHost: e.host,
-            observeSession: e.session,
-            observeUser: e.user || undefined,
-          });
-        }
-      });
-    }, 1500);
-    return () => window.clearInterval(t);
-  }, [rf, addTerminal]);
-
-
   const empty = nodes.length === 0;
 
   const hint = useMemo(
@@ -448,11 +388,10 @@ function Canvas() {
           <ZoomControl />
         </Controls>
       </ReactFlow>
-      <TopBar onAddTerm={() => addTerminal()} onInstallCodex={installCodex} onWriteCodexRules={() => void writeCodexRules()} />
+      <TopBar onAddTerm={() => addTerminal()} />
       {empty && hint}
       <HelpOverlay />
       <NoticeOverlay />
-      <CodexConfigOverlay />
       <QuickCommandsOverlay onNewTerminal={(cmd) => addTerminal({ title: "快捷命令", runOnOpen: cmd })} />
       <AddStatusOverlay onCreate={addStatusNode} />
     </div>

@@ -7,10 +7,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { WebSocketServer } from "ws";
 import { attachPty, beatStale, killAllPtys, liveCount } from "./pty.ts";
-import { fetchCodexModels, readCodexConfig, saveCodexConfig, type CodexConfigInput } from "./codexConfig.ts";
-import { clearObserve, observeSince, reportObserve } from "./observe.ts";
 import { getStatus, isValidStatusHost } from "./status.ts";
-import { agentsRuleState, writeAgentsRule } from "./codexAgents.ts";
 
 const PORT = Number(process.env.SSHX_PORT ?? 8787);
 
@@ -18,44 +15,6 @@ const app = express();
 app.use(express.json({ limit: "64kb" }));
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, ptys: liveCount() });
-});
-
-/* Codex CLI 配置面：GET 永远脱敏（只有 hasKey），POST 合并写 config.toml/.env；
-   /api/codex/models = 服务端代理拉模型列表（避开 CORS，key 只进不出） */
-app.post("/api/codex/models", async (req, res) => {
-  const { baseUrl, apiKey } = req.body as { baseUrl?: string; apiKey?: string };
-  const r = await fetchCodexModels(String(baseUrl ?? ""), String(apiKey ?? ""));
-  if ("error" in r) return res.status(502).json({ error: r.error });
-  res.json(r);
-});
-app.get("/api/codex/config", (_req, res) => {
-  res.json(readCodexConfig());
-});
-app.post("/api/codex/config", (req, res) => {
-  const r = saveCodexConfig(req.body as CodexConfigInput);
-  if ("error" in r) return res.status(400).json({ error: r.error });
-  res.json(r);
-});
-
-/* codex 全局规矩：幂等标记块写入 ~/.codex/AGENTS.md（远端 tmux 共享工位协议） */
-app.get("/api/codex/agents", (_req, res) => res.json(agentsRuleState()));
-app.post("/api/codex/agents", (_req, res) => {
-  const r = writeAgentsRule();
-  if ("error" in r) return res.status(500).json({ error: r.error });
-  res.json({ ok: true, ...r });
-});
-
-/* 观察事件面：ssh shim POST 上报；画布 GET since 游标拉新 */
-app.post("/api/observe", (req, res) => {
-  const accepted = reportObserve(req.body as { host?: string; session?: string; by?: string });
-  res.json({ ok: accepted });
-});
-app.get("/api/observe/since", (req, res) => {
-  res.json(observeSince(Number(req.query.id ?? 0)));
-});
-app.post("/api/observe/clear", (_req, res) => {
-  clearObserve();
-  res.json({ ok: true });
 });
 
 /* ── 服务器状态卡：单次 ssh 采集脚本 → 指标 JSON（缓存+连接复用，详见 status.ts 头注） ── */
